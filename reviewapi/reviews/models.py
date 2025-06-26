@@ -12,4 +12,4 @@ class Review(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):
-        return f"{self.app_name} - {self.rating}★"
+        return f"{self.app_name} by {self.reviewer}"

@@ -23,7 +23,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 SECRET_KEY = 'django-insecure-_m)rs5htj+kk)=g0b&*dxcs@h^ydd2@j9@q=fn$37_di2#c-^t'
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+DEBUG = False
 
 ALLOWED_HOSTS = ['*']
 
@@ -41,7 +41,8 @@ INSTALLED_APPS = [
     'rest_framework_simplejwt',
     'corsheaders',
     'rest_framework.authtoken',
-    'reviews',          
+    'reviews',
+    'reviewapi',          
 ]
 
 MIDDLEWARE = [
@@ -139,11 +140,12 @@ REST_FRAMEWORK = {
 from datetime import timedelta
 
 SIMPLE_JWT = {
-    'ACCESS_TOKEN_LIFETIME': timedelta(hours=1),  # 1 hour
-    'REFRESH_TOKEN_LIFETIME': timedelta(days=7),  # 7 days
+    'ACCESS_TOKEN_LIFETIME': timedelta(hours=2),  # 1 hour
+    'REFRESH_TOKEN_LIFETIME': timedelta(days=14),  # 14 days
 }
 
 DEBUG = True
+
 
 CORS_ALLOWED_ORIGINS = [
     "http://localhost:5173",  # React frontend
@@ -152,4 +154,4 @@ CORS_ALLOWED_ORIGINS = [
 MEDIA_URL = '/media/'
 MEDIA_ROOT = BASE_DIR / 'media'  # or os.path.join(BASE_DIR, 'media')
 
-APPEND_SLASH = False
+APPEND_SLASH = True

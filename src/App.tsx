@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import reviewLogo from "./assets/review.jpeg";
 import "./App.css";
 
+
 const backend_api_url = "http://127.0.0.1:8000/api/reviews/";
 
 type Review = {
@@ -9,6 +10,7 @@ type Review = {
   app_name: string;
   reviewer: string;
   review: string;
+  comment?: string; // Optional field for comments
   rating: number;
   image: string; // base64 or URL
 };
@@ -55,50 +57,71 @@ export default function App() {
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  e.preventDefault();
+  setError(null);
 
-    const method = editingId ? "PUT" : "POST";
-    const url = editingId ? `${backend_api_url}${editingId}/` : backend_api_url;
+  const method = editingId ? "PUT" : "POST";
+  const url = editingId ? `${backend_api_url}${editingId}/` : backend_api_url;
 
+  const formData = new FormData();
+  formData.append("app_name", form.app_name);
+  formData.append("reviewer", form.reviewer);
+  formData.append("review", form.review);
+  formData.append("comment", form.comment || ""); // Ensure comment is included
+  formData.append("rating", form.rating.toString());
+
+  if (form.image) {
+    const blob = await (await fetch(form.image)).blob();
+    formData.append("image", blob, "image.png");
+  }
+
+  try {
+    const token = localStorage.getItem("access");
     const response = await fetch(url, {
       method,
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(form),
+      ...(token
+        ? { headers: { Authorization: `Bearer ${token}` } }
+        : {}),
+      body: formData,
     });
 
     if (!response.ok) {
-      console.error("Failed to save review");
+      const errData = await response.json();
+      const message = errData.detail || "Something went wrong while saving the review.";
+      setError(message);
       return;
     }
 
     const savedReview = await response.json();
-
-    if (editingId) {
-      setReviews(reviews.map((r) => (r.id === editingId ? savedReview : r)));
-    } else {
-      setReviews([...reviews, savedReview]);
-    }
-
-    setForm({ app_name: "", reviewer: "", review: "", rating: 1, image: "" });
-    setEditingId(null);
-    setImagePreview(null);
-  };
-
-  const deleteReview = async (id: number) => {
-    const res = await fetch(`${backend_api_url}${id}/`, {
-      method: "DELETE",
+    setReviews((prev) =>
+      editingId
+        ? prev.map((r) => (r.id === editingId ? savedReview : r))
+        : [...prev, savedReview]
+    );
+    setForm({
+      app_name: "",
+      reviewer: "",
+      review: "",
+      comment: "",
+      rating: 1,
+      image: "",
     });
+    setImagePreview(null);
+    setEditingId(null);
+  } catch {
+    setError("Network error or server is down.");
+  }
+};
+  const [error, setError] = useState<string | null>(null);  
 
-    if (res.ok) {
-      setReviews(reviews.filter((r) => r.id !== id));
-    }
-  };
+
 
   const editReview = (review: Review) => {
     setForm({
       app_name: review.app_name,
       reviewer: review.reviewer,
       review: review.review,
+      comment: review.comment || "",
       rating: review.rating,
       image: review.image || "",
     });
@@ -128,9 +151,34 @@ export default function App() {
 
   console.log('reviews',reviews)
 
+  // Function to delete a review
+  const deleteReview = async (id: number) => {
+    try {
+      const token = localStorage.getItem("access");
+      const response = await fetch(`${backend_api_url}${id}/`, {
+        method: "DELETE",
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+      if (!response.ok) {
+        setError("Failed to delete review.");
+        return;
+      }
+      setReviews((prev) => prev.filter((r) => r.id !== id));
+    } catch {
+      setError("Network error or server is down.");
+    }
+  };
+
   return (
     <div className="app-container">
       <img src={reviewLogo} alt="Review Logo" className="review-logo review-logo-centered" />
+      {error && (
+        <div className="mb-4 p-3 bg-red-100 text-red-700 rounded-lg border border-red-300">
+          {error}
+        </div>
+      )}
       <form
         onSubmit={handleSubmit}
         className="bg-white/90 shadow-xl rounded-2xl px-10 pt-8 pb-10 mb-8 border border-purple-200"
@@ -168,17 +216,18 @@ export default function App() {
         </div>
         <div className="mb-6">
           <label className="block font-semibold mb-1">
-            <span className="text-yellow-700">Review</span>
+            <span className="text-yellow-700">Comment</span>
             <span className="text-red-600 ml-1">*</span>
           </label>
           <textarea
-            name="review"
-            value={form.review}
+            typeof="text"
+            name="comment"
+            value={form.comment}
             onChange={handleChange}
             className="w-full border-2 border-yellow-200 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-yellow-400 transition"
             required
             placeholder="Write your review"
-            title="Review"
+            title="Comment"
           />
         </div>
         <div className="mb-6">
@@ -240,6 +289,7 @@ export default function App() {
                   <th className="reviews-table-header">App Name</th>
                   <th className="reviews-table-header">Reviewer</th>
                   <th className="reviews-table-header">Review</th>
+                  <th className="reviews-table-header">Comment</th>
                   <th className="reviews-table-header">Rating</th>
                   <th className="reviews-table-header">Image</th>
                   <th className="reviews-table-header">Actions</th>
@@ -251,6 +301,7 @@ export default function App() {
                     <td className="reviews-table-cell">{r.app_name}</td>
                     <td className="reviews-table-cell">{r.reviewer}</td>
                     <td className="reviews-table-cell review-text">{r.review}</td>
+                    <td className="reviews-table-cell">{r.comment || "No comment"}</td>
                     <td className="reviews-table-cell">{r.rating}</td>
                     <td className="reviews-table-cell">
                       {r.image && (
@@ -288,3 +339,4 @@ export default function App() {
     </div>
   );
 }
+
