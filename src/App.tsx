@@ -1,38 +1,78 @@
 import { useEffect, useState } from "react";
+import { ToastContainer, toast } from "react-toastify";
+import "react-toastify/dist/ReactToastify.css";
+
 import reviewLogo from "./assets/review.jpeg";
+import {
+  BrowserRouter as Router,
+  Routes,
+  Route,
+  Navigate,
+  useNavigate,
+} from "react-router-dom";
+import LoginPage from "./pages/Login";
+import NotFound from "./pages/NotFound.tsx";
 import "./App.css";
 
-
 const backend_api_url = "http://127.0.0.1:8000/api/reviews/";
+const REVIEWS_PER_PAGE = 6;
 
 type Review = {
   id?: number;
-  app_name: string;
-  reviewer: string;
+  customer_name: string;
+  served_by: string;
   review: string;
-  comment?: string; // Optional field for comments
+  comment?: string;
   rating: number;
-  image: string; // base64 or URL
+  image?: string;
 };
 
-export default function App() {
+function ReviewApp() {
+  const navigate = useNavigate();
   const [reviews, setReviews] = useState<Review[]>([]);
   const [form, setForm] = useState<Review>({
-    app_name: "",
-    reviewer: "",
+    customer_name: "",
+    served_by: "",
     review: "",
+    comment: "",
     rating: 1,
     image: "",
   });
   const [editingId, setEditingId] = useState<number | null>(null);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [step, setStep] = useState<number>(1);
+  const [currentPage, setCurrentPage] = useState(1);
+
+  const token = localStorage.getItem("access");
+
+  const handleLogout = () => {
+    localStorage.removeItem("access");
+    localStorage.removeItem("refresh");
+    navigate("/login");
+  };
 
   useEffect(() => {
-    fetch(backend_api_url)
+    if (!token) return;
+
+    fetch(backend_api_url, {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    })
       .then((res) => res.json())
-      .then((data) => setReviews(data))
-      .catch((err) => console.error("Fetch error:", err));
-  }, []);
+      .then((data) => {
+        if (Array.isArray(data)) {
+          setReviews(data);
+        } else {
+          console.error("Unexpected data format:", data);
+          setReviews([]);
+        }
+      })
+      .catch((err) => {
+        console.error("Fetch error:", err);
+        setReviews([]);
+      });
+  }, [token]);
 
   const handleChange = (
     e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>
@@ -57,104 +97,90 @@ export default function App() {
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
-  e.preventDefault();
-  setError(null);
-
-  const method = editingId ? "PUT" : "POST";
-  const url = editingId ? `${backend_api_url}${editingId}/` : backend_api_url;
-
-  const formData = new FormData();
-  formData.append("app_name", form.app_name);
-  formData.append("reviewer", form.reviewer);
-  formData.append("review", form.review);
-  formData.append("comment", form.comment || ""); // Ensure comment is included
-  formData.append("rating", form.rating.toString());
-
-  if (form.image) {
-    const blob = await (await fetch(form.image)).blob();
-    formData.append("image", blob, "image.png");
-  }
-
-  try {
-    const token = localStorage.getItem("access");
-    const response = await fetch(url, {
-      method,
-      ...(token
-        ? { headers: { Authorization: `Bearer ${token}` } }
-        : {}),
-      body: formData,
-    });
-
-    if (!response.ok) {
-      const errData = await response.json();
-      const message = errData.detail || "Something went wrong while saving the review.";
-      setError(message);
+    e.preventDefault();
+    setError(null);
+    setSuccessMessage(null);
+    toast.success(editingId ? "Review updated successfully!" : "Review uploaded successfully!");
+    if (!token) {
+      setError("You must be logged in to submit a review.");
+      return;
+    } 
+    if (form.customer_name.trim() === "" || form.served_by.trim() === "") {
+      setError("Customer name and served by fields cannot be empty.");
+      return;
+    }
+    if (form.review.trim() === "") {
+      setError("Please select a review option.");
       return;
     }
 
-    const savedReview = await response.json();
-    setReviews((prev) =>
-      editingId
-        ? prev.map((r) => (r.id === editingId ? savedReview : r))
-        : [...prev, savedReview]
-    );
-    setForm({
-      app_name: "",
-      reviewer: "",
-      review: "",
-      comment: "",
-      rating: 1,
-      image: "",
-    });
-    setImagePreview(null);
-    setEditingId(null);
-  } catch {
-    setError("Network error or server is down.");
-  }
-};
-  const [error, setError] = useState<string | null>(null);  
+    const method = editingId ? "PUT" : "POST";
+    const url = editingId ? `${backend_api_url}${editingId}/` : backend_api_url;
 
+    const formData = new FormData();
+    formData.append("customer_name", form.customer_name);
+    formData.append("served_by", form.served_by);
+    formData.append("review", form.review);
+    formData.append("comment", form.comment || "");
+    formData.append("rating", form.rating.toString());
 
+    if (form.image) {
+      const blob = await (await fetch(form.image)).blob();
+      formData.append("image", blob, "image.png");
+    }
+
+    try {
+      const response = await fetch(url, {
+        method,
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+        body: formData,
+      });
+
+      if (!response.ok) {
+        const errData = await response.json();
+        setError(errData.detail || "Something went wrong while saving the review.");
+        return;
+      }
+
+      const savedReview = await response.json();
+      setReviews((prev) =>
+        editingId
+          ? prev.map((r) => (r.id === editingId ? savedReview : r))
+          : [...prev, savedReview]
+      );
+      setForm({
+        customer_name: "",
+        served_by: "",
+        review: "",
+        comment: "",
+        rating: 1,
+        image: "",
+      });
+      setImagePreview(null);
+      setEditingId(null);
+      setStep(1);
+      setSuccessMessage(editingId ? "Review updated successfully." : "Review uploaded successfully.");
+    } catch {
+      setError("Network error or server is down.");
+    }
+  };
 
   const editReview = (review: Review) => {
     setForm({
-      app_name: review.app_name,
-      reviewer: review.reviewer,
+      customer_name: review.customer_name,
+      served_by: review.served_by,
       review: review.review,
       comment: review.comment || "",
       rating: review.rating,
       image: review.image || "",
     });
     setImagePreview(review.image || null);
-    if (typeof review.id === "number") {
-      setEditingId(review.id);
-    } else {
-      setEditingId(null);
-    }
+    setEditingId(typeof review.id === "number" ? review.id : null);
+    setStep(1);
   };
 
-  useEffect(() => {
-    const fontLink = document.createElement("link");
-    fontLink.href =
-      "https://fonts.googleapis.com/css2?family=Pacifico&family=Quicksand:wght@500;700&display=swap";
-    fontLink.rel = "stylesheet";
-    document.head.appendChild(fontLink);
-
-    document.body.style.backgroundColor = "#87ceeb";
-    
-
-    return () => {
-      document.body.style.backgroundColor = "";
-      document.head.removeChild(fontLink);
-    };
-  }, []);
-
-  console.log('reviews',reviews)
-
-  // Function to delete a review
   const deleteReview = async (id: number) => {
     try {
-      const token = localStorage.getItem("access");
       const response = await fetch(`${backend_api_url}${id}/`, {
         method: "DELETE",
         headers: {
@@ -166,173 +192,154 @@ export default function App() {
         return;
       }
       setReviews((prev) => prev.filter((r) => r.id !== id));
+      setSuccessMessage("Review deleted successfully.");
     } catch {
       setError("Network error or server is down.");
     }
+    toast.success("Review deleted successfully!");
+  
   };
+
+  // Pagination logic
+  const totalPages = Math.ceil(reviews.length / REVIEWS_PER_PAGE);
+  const paginatedReviews = reviews.slice(
+    (currentPage - 1) * REVIEWS_PER_PAGE,
+    currentPage * REVIEWS_PER_PAGE
+  );
 
   return (
     <div className="app-container">
-      <img src={reviewLogo} alt="Review Logo" className="review-logo review-logo-centered" />
-      {error && (
-        <div className="mb-4 p-3 bg-red-100 text-red-700 rounded-lg border border-red-300">
-          {error}
-        </div>
-      )}
-      <form
-        onSubmit={handleSubmit}
-        className="bg-white/90 shadow-xl rounded-2xl px-10 pt-8 pb-10 mb-8 border border-purple-200"
-      >
-        <div className="mb-6">
-          <label className="block font-semibold mb-1">
-            <span className="text-purple-700">App Name</span>
-            <span className="text-red-600 ml-1">*</span>
-          </label>
-          <input
-            type="text"
-            name="app_name"
-            value={form.app_name}
-            onChange={handleChange}
-            className="w-full border-2 border-purple-200 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-purple-400 transition"
-            required
-            placeholder="Enter app name"
-          />
-        </div>
-        <div className="mb-6">
-          <label className="block font-semibold mb-1">
-            <span className="text-pink-700">Reviewer</span>
-            <span className="text-red-600 ml-1">*</span>
-          </label>
-          <input
-            type="text"
-            name="reviewer"
-            value={form.reviewer}
-            onChange={handleChange}
-            className="w-full border-2 border-pink-200 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-pink-400 transition"
-            required
-            placeholder="Enter reviewer name"
-            title="Reviewer"
-          />
-        </div>
-        <div className="mb-6">
-          <label className="block font-semibold mb-1">
-            <span className="text-yellow-700">Comment</span>
-            <span className="text-red-600 ml-1">*</span>
-          </label>
-          <textarea
-            typeof="text"
-            name="comment"
-            value={form.comment}
-            onChange={handleChange}
-            className="w-full border-2 border-yellow-200 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-yellow-400 transition"
-            required
-            placeholder="Write your review"
-            title="Comment"
-          />
-        </div>
-        <div className="mb-6">
-          <label className="block font-semibold mb-1">
-            <span className="text-green-700">Rating</span>
-            <span className="text-red-600 ml-1">*</span>
-          </label>
-          <select
-            name="rating"
-            value={form.rating}
-            onChange={handleChange}
-            className="w-full border-2 border-green-200 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-green-400 transition"
-            title="Rating"
-            required
-          >
-            {[1, 2, 3, 4, 5].map((n) => (
-              <option key={n} value={n}>
-                {n}
-              </option>
-            ))}
-          </select>
-        </div>
-        <div className="mb-6">
-          <label className="block font-semibold mb-1">
-            <span className="text-blue-700">Image</span>
-          </label>
-          <input
-            type="file"
-            accept="image/*"
-            onChange={handleImageChange}
-            className="w-full border-2 border-blue-200 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-400 transition"
-            title="Upload an image"
-            placeholder="Choose an image file"
-          />
-          {imagePreview && (
-            <img
-              src={imagePreview}
-              alt="Preview"
-              className="mt-2 rounded-lg shadow-md"
+      <div className="top-bar">
+        <img src={reviewLogo} alt="Review Logo" className="review-logo" />
+        <button onClick={handleLogout} className="logout-btn top-right">
+          Logout
+        </button>
+      </div>
+
+      {error && <div className="login-error">{error}</div>}
+      {successMessage && <div className="success-message">{successMessage}</div>}
+
+      <form onSubmit={handleSubmit} className="review-form">
+        {step === 1 && (
+          <>
+            <input
+              type="text"
+              name="customer_name"
+              placeholder="Your Name"
+              value={form.customer_name}
+              onChange={handleChange}
+              required
             />
-          )}
-        </div>
-        <button
-          type="submit"
-          className="w-full bg-purple-600 text-white rounded-lg px-4 py-2 font-semibold transition-all duration-300 ease-in-out hover:bg-purple-700 focus:outline-none focus:ring-2 focus:ring-purple-400"
-        >
-          {editingId ? "Update Review" : "Submit Review"}
-        </button>
+            <button type="button" onClick={() => setStep(2)}>Next</button>
+          </>
+        )}
+
+        <ToastContainer
+          position="top-right"
+          autoClose={5000}
+          hideProgressBar={false}
+          newestOnTop={false}
+          closeOnClick
+          rtl={false}
+          pauseOnFocusLoss
+          draggable
+          pauseOnHover
+/>
+
+
+        {step === 2 && (
+          <>
+            <input
+              type="text"
+              name="served_by"
+              placeholder="Name of the person who served you"
+              value={form.served_by}
+              onChange={handleChange}
+              required
+            />
+            <button type="button" onClick={() => setStep(1)}>Previous</button>
+            <button type="button" onClick={() => setStep(3)}>Next</button>
+          </>
+        )}
+
+        {step === 3 && (
+          <>
+            <label htmlFor="review-select" className="visually-hidden">Review</label>
+            <select
+              id="review-select"
+              name="review"
+              value={form.review}
+              onChange={handleChange}
+              required
+              aria-label="Review"
+            >
+              <option value="">Select a review</option>
+              <option value="poor">Poor</option>
+              <option value="fair">Fair</option>
+              <option value="average">Average</option>
+              <option value="good">Good</option>
+              <option value="excellent">Excellent</option>
+            </select>
+            <input
+              type="text"
+              name="comment"
+              placeholder="(optional)"
+              value={form.comment}
+              onChange={handleChange}
+            />
+            <input
+              type="number"
+              name="rating"
+              min={1}
+              max={5}
+              value={form.rating}
+              onChange={handleChange}
+              required
+            />
+            <input
+              type="file"
+              accept="image/*"
+              onChange={handleImageChange}
+              title="Upload an image"
+            />
+            {imagePreview && (
+              <img src={imagePreview} alt="Preview" className="image-preview" />
+            )}
+            <div>
+              <button type="button" onClick={() => setStep(2)}>Previous</button>
+              <button type="submit">{editingId ? "Update" : "Add"} Review</button>
+            </div>
+          </>
+        )}
       </form>
-      <div className="reviews-container custom-reviews-container">
-        <h2 className="reviews-title custom-reviews-title">Reviews</h2>
-        {reviews.length === 0 ? (
-          <p className="no-reviews">No reviews yet.</p>
-        ) : (
-          <div className="reviews-table-wrapper">
-            <table className="reviews-table">
-              <thead>
-                <tr className="reviews-table-header-row">
-                  <th className="reviews-table-header">App Name</th>
-                  <th className="reviews-table-header">Reviewer</th>
-                  <th className="reviews-table-header">Review</th>
-                  <th className="reviews-table-header">Comment</th>
-                  <th className="reviews-table-header">Rating</th>
-                  <th className="reviews-table-header">Image</th>
-                  <th className="reviews-table-header">Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {reviews.map((r) => (
-                  <tr key={r.id} className="reviews-table-row">
-                    <td className="reviews-table-cell">{r.app_name}</td>
-                    <td className="reviews-table-cell">{r.reviewer}</td>
-                    <td className="reviews-table-cell review-text">{r.review}</td>
-                    <td className="reviews-table-cell">{r.comment || "No comment"}</td>
-                    <td className="reviews-table-cell">{r.rating}</td>
-                    <td className="reviews-table-cell">
-                      {r.image && (
-                        <img
-                          src={r.image}
-                          alt="Review"
-                          className="review-image"
-                        />
-                      )}
-                    </td>
-                    <td className="reviews-table-cell">
-        <button
-          type="button"
-          onClick={() => r.id !== undefined && editReview(r)}
-          className="edit-btn"
-          title="Edit Review"
-        >
-          Edit
-        </button>
-                      <button
-                        type="button"
-                        onClick={() => r.id !== undefined && deleteReview(r.id)}
-                        className="delete-btn"
-                      >
-                        Delete
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+
+      <div className="reviews-list">
+        <h2>Reviews</h2>
+        <ul className="card-grid">
+          {paginatedReviews.map((review) => (
+            <li key={review.id} className="card-item review-list-item">
+              <strong>{review.customer_name}</strong> by {review.served_by} - Rating: {review.rating}
+              <br />
+              {review.review}
+              {review.comment && <div>Comment: {review.comment}</div>}
+              {review.image && (
+                <div>
+                  <img src={review.image} alt="Review" className="review-image" />
+                </div>
+              )}
+              <div className="review-actions">
+                <button onClick={() => editReview(review)}>Edit</button>{" "}
+                <button onClick={() => review.id && deleteReview(review.id)}>Delete</button>
+              </div>
+            </li>
+          ))}
+        </ul>
+
+        {totalPages > 1 && (
+          <div className="pagination">
+            <button disabled={currentPage === 1} onClick={() => setCurrentPage(currentPage - 1)}>Previous</button>
+            <span>Page {currentPage} of {totalPages}</span>
+            <button disabled={currentPage === totalPages} onClick={() => setCurrentPage(currentPage + 1)}>Next</button>
           </div>
         )}
       </div>
@@ -340,3 +347,27 @@ export default function App() {
   );
 }
 
+export default function App() {
+  const [token, setToken] = useState<string | null>(
+    localStorage.getItem("access")
+  );
+
+  useEffect(() => {
+    const handleStorageChange = () => {
+      setToken(localStorage.getItem("access"));
+    };
+
+    window.addEventListener("storage", handleStorageChange);
+    return () => window.removeEventListener("storage", handleStorageChange);
+  }, []);
+
+  return (
+    <Router>
+      <Routes>
+        <Route path="/" element={token ? <ReviewApp /> : <Navigate to="/login" />} />
+        <Route path="/login" element={<LoginPage />} />
+        <Route path="*" element={<NotFound />} />
+      </Routes>
+    </Router>
+  );
+}

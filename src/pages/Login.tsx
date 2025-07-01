@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
+import "../app.css";
 
 const Login = () => {
   const [username, setUsername] = useState("");
@@ -23,11 +24,16 @@ const Login = () => {
       const data = await response.json();
 
       if (response.ok) {
+        // Save the tokens
         localStorage.setItem("access", data.access);
         localStorage.setItem("refresh", data.refresh);
-        navigate("/dashboard"); // update this if needed
+        window.location.href = "/"; // Redirect to the home page
+        
+
+        // Redirect to the App Review page
+        navigate("/"); // This will load the ReviewApp from App.tsx
       } else {
-        setError(data.detail || "Login failed.");
+        setError(data.detail || "Login failed. Please check your credentials.");
       }
     } catch {
       setError("Server error. Please try again later.");
@@ -35,31 +41,32 @@ const Login = () => {
   };
 
   return (
-    <div className="p-4 max-w-md mx-auto">
-      <h2 className="text-xl font-semibold mb-4">Login</h2>
-      <form onSubmit={handleLogin} className="space-y-3">
-        <input
-          type="text"
-          placeholder="Username"
-          value={username}
-          onChange={(e) => setUsername(e.target.value)}
-          className="w-full p-2 border rounded"
-        />
-        <input
-          type="password"
-          placeholder="Password"
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-          className="w-full p-2 border rounded"
-        />
-        {error && <p className="text-red-500">{error}</p>}
-        <button
-          type="submit"
-          className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700"
-        >
-          Login
-        </button>
-      </form>
+    <div className="login-wrapper">
+      <div className="login-box">
+        <h2 className="login-title">Login</h2>
+        <form onSubmit={handleLogin} className="login-form">
+          <input
+            type="text"
+            placeholder="Username"
+            value={username}
+            onChange={(e) => setUsername(e.target.value)}
+            className="login-input"
+            required
+          />
+          <input
+            type="password"
+            placeholder="Password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            className="login-input"
+            required
+          />
+          {error && <p className="login-error">{error}</p>}
+          <button type="submit" className="login-btn">
+            Login
+          </button>
+        </form>
+      </div>
     </div>
   );
 };
